@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Streamlit
+.streamlit/
+
+# Data files (optional - uncomment if you don't want to track PDFs)
+# data/*.pdf
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
