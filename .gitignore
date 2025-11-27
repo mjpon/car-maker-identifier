@@ -16,8 +16,8 @@ ENV/
 *.swo
 .DS_Store
 
-# Streamlit
-.streamlit/
+# Streamlit secrets (but keep config)
+.streamlit/secrets.toml
 
 # Data files (optional - uncomment if you don't want to track PDFs)
 # data/*.pdf
