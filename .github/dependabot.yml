@@ -8,8 +8,14 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-  # Python packages for the Streamlit app.
+  # Python packages for the Streamlit app. One pull request a month, and no major-version jumps.
   - package-ecosystem: pip
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      python-packages:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
