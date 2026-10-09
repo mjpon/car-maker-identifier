@@ -4,8 +4,8 @@
 
 A Streamlit web application that visualizes where vehicle parts come from based on the **American Automobile Labeling Act (AALA)** reports from the National Highway Traffic Safety Administration (NHTSA).
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.0+-red.svg)
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.65+-red.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ## Background Story
@@ -21,12 +21,12 @@ Fast forward to now - this is the **first iteration** of that long-held idea fin
 - **Extracts data from NHTSA PDF reports** (2020-2026 model years)
 - **Normalizes country codes** (e.g., "G" to Germany, "J" to Japan, "H" to Hungary)
 - **Cleans manufacturer names** (handles OCR errors, duplicates, variations)
-- **Visualizes the data** through an interactive Streamlit dashboard with:
-  - Overview of manufacturers and vehicle counts
-  - Assembly location analysis by country
-  - Engine and transmission source breakdowns
-  - US/Canada content percentage analysis
-  - Searchable data table with export functionality
+- **Visualizes the data** through an interactive Streamlit app with five views:
+  - Overview: models by manufacturer and models reported per model year
+  - Assembly: vehicles by final assembly country
+  - Engines and transmissions: source countries for each component
+  - Parts content: US/Canada content bands, foreign sources, and a per-manufacturer breakdown
+  - Data: sortable table with CSV export
 
 ## Data Source
 
@@ -68,12 +68,13 @@ This project tackles several interesting data engineering challenges:
 2. **Country Code Normalization** - Mapping single-letter codes (G, J, H, K, M, I) to full country names
 3. **Manufacturer Name Cleaning** - Handling OCR errors, multiline concatenation, and name variations
 4. **Data Validation** - Filtering out legend entries, invalid rows, and corrupted data
+5. **Layout Drift Between Years** - The MY2023+ PDFs add an extra empty table column, so the assembly country has to be found by position-independent fallback (see `process_data` in `data_loader.py`)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - pip
 
 ### Installation
@@ -108,13 +109,28 @@ To re-download and parse the latest NHTSA PDFs:
 python data_loader.py
 ```
 
+## Design
+
+The interface follows the visual language of Swiss and Austrian railway timetables (SBB and ÖBB):
+
+- White paper, one signal red, charcoal rules, and blue only for a second data series
+- Large tabular numerals for the headline figures, like a departure board
+- Flat bars with values printed at the bar ends instead of axes; the leader in each ranking is red
+- Sentence-case labels, a hairline-ruled grid, and no emoji or decorative icons
+
+`theme.py` holds the colours and CSS, `charts.py` holds the chart builders, and `.streamlit/config.toml` sets the Streamlit theme. The page loads Hanken Grotesk from Google Fonts and falls back to Helvetica or Arial when offline.
+
 ## Project Structure
 
 ```
 car-maker-identifier/
-├── app.py              # Streamlit web application
+├── app.py              # Streamlit web application (filters, layout, tabs)
+├── theme.py            # Colours, CSS, and HTML building blocks
+├── charts.py           # Plotly chart builders
 ├── data_loader.py      # PDF parser and data processor
 ├── requirements.txt    # Python dependencies
+├── .streamlit/
+│   └── config.toml     # Streamlit theme
 ├── data/
 │   ├── MY2020_AALA.pdf # NHTSA reports (2020-2026)
 │   ├── MY2021_AALA.pdf

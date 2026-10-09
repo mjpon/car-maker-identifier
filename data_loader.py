@@ -642,8 +642,14 @@ def process_data(raw_data):
         # Transmission source is in column 9
         trans = row[9] if len(row) > 9 else ""
         
-        # Assembly country is at index -3 (third from last, before empty col and year)
+        # Assembly country is normally at index -3 (before an empty column and the year).
+        # Newer PDFs (MY2023+) have one more empty column, which moves the value to -4 and
+        # used to leave Assembly Country blank for most of those rows. When -3 is empty,
+        # fall back to the last filled cell after the transmission columns.
         assembly = row[-3] if len(row) > 3 else ""
+        if not str(assembly).strip():
+            filled = [str(c).strip() for c in row[11:-1] if str(c).strip()]
+            assembly = filled[-1] if filled else ""
         
         # Normalize country codes to full names
         engine_norm = normalize_country(engine, manufacturer)
