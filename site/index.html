@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where vehicle parts come from | Car maker identifier</title>
+<meta name="description" content="Where the engine, transmission and final assembly of new US vehicles come from, read from NHTSA's American Automobile Labeling Act reports. Compare manufacturers, countries and model years.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/public-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/public-sans-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the results</a>
+
+<header class="masthead">
+  <div class="wrap masthead-row">
+    <span class="wordmark">Vehicle parts origin</span>
+    <span class="source" id="source">Source: NHTSA AALA reports</span>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  <h1 class="title">Where vehicle parts come from</h1>
+  <p class="intro">Every new passenger vehicle sold in the US carries a label that says where its engine, transmission and final assembly come from. This tool reads those reports so you can compare manufacturers, countries and model years.</p>
+
+  <noscript><p class="notice">This page draws its charts in the browser, so it needs JavaScript.</p></noscript>
+
+  <section class="filters" aria-label="Filters">
+    <fieldset class="field f-year">
+      <legend>Model year</legend>
+      <div class="chips" id="year-chips"></div>
+    </fieldset>
+    <div class="field f-make">
+      <label id="make-label" for="make-button">Manufacturer</label>
+      <div class="menu" id="make-menu">
+        <button type="button" class="control menu-button" id="make-button" aria-haspopup="true" aria-expanded="false" aria-controls="make-panel">
+          <span id="make-summary">All manufacturers</span>
+        </button>
+        <div class="menu-panel" id="make-panel" hidden>
+          <input type="search" id="make-search" class="control" placeholder="Search manufacturers" aria-label="Search manufacturers" autocomplete="off">
+          <ul class="menu-list" id="make-list"></ul>
+          <button type="button" class="link-button" id="make-clear">Clear manufacturers</button>
+        </div>
+      </div>
+    </div>
+    <div class="field f-line">
+      <label for="car-line">Car line</label>
+      <input type="search" id="car-line" class="control" placeholder="For example, Civic or F-150" autocomplete="off">
+    </div>
+  </section>
+
+  <div id="empty" class="notice" role="status" hidden>No vehicles match these filters. Remove a manufacturer or clear the car line search.</div>
+
+  <div id="results">
+    <div class="board" id="board" aria-live="polite"></div>
+
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true">Overview</button>
+      <button type="button" role="tab" id="tab-assembly" aria-controls="panel-assembly" aria-selected="false" tabindex="-1">Assembly</button>
+      <button type="button" role="tab" id="tab-components" aria-controls="panel-components" aria-selected="false" tabindex="-1">Engines and transmissions</button>
+      <button type="button" role="tab" id="tab-content" aria-controls="panel-content" aria-selected="false" tabindex="-1">Parts content</button>
+      <button type="button" role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1">Data</button>
+    </div>
+
+    <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0"></section>
+    <section id="panel-assembly" role="tabpanel" aria-labelledby="tab-assembly" tabindex="0" hidden></section>
+    <section id="panel-components" role="tabpanel" aria-labelledby="tab-components" tabindex="0" hidden></section>
+    <section id="panel-content" role="tabpanel" aria-labelledby="tab-content" tabindex="0" hidden></section>
+    <section id="panel-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden></section>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <p>Data: <a href="https://www.nhtsa.gov/part-583-american-automobile-labeling-act-reports">NHTSA Part 583 American Automobile Labeling Act reports</a>.</p>
+    <p>Country codes in the PDFs are normalized to full names (for example, MEX and MX become Mexico). Some ambiguous codes, such as CH, are interpreted from context. Blank values mean the report left the field empty or the parser could not read it.</p>
+    <p>An independent project. Not run or endorsed by NHTSA or any government agency.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

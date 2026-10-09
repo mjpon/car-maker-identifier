@@ -2,7 +2,12 @@
 
 > **Proof of Concept** | First Iteration
 
-A Streamlit web application that visualizes where vehicle parts come from based on the **American Automobile Labeling Act (AALA)** reports from the National Highway Traffic Safety Administration (NHTSA).
+Explore where vehicle parts come from, based on the **American Automobile Labeling Act (AALA)** reports from the National Highway Traffic Safety Administration (NHTSA).
+
+It comes in two forms that read the same data:
+
+- **A static website** in `site/`, published on Cloudflare at **https://cars.mitchell-pon.com**. No server, no account, nothing to install.
+- **A Streamlit app** (`app.py`) for running locally.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.65+-red.svg)
@@ -21,7 +26,7 @@ Fast forward to now - this is the **first iteration** of that long-held idea fin
 - **Extracts data from NHTSA PDF reports** (2020-2026 model years)
 - **Normalizes country codes** (e.g., "G" to Germany, "J" to Japan, "H" to Hungary)
 - **Cleans manufacturer names** (handles OCR errors, duplicates, variations)
-- **Visualizes the data** through an interactive Streamlit app with five views:
+- **Visualizes the data** in the static site and the Streamlit app, both with five views:
   - Overview: models by manufacturer and models reported per model year
   - Assembly: vehicles by final assembly country
   - Engines and transmissions: source countries for each component
@@ -70,6 +75,34 @@ This project tackles several interesting data engineering challenges:
 4. **Data Validation** - Filtering out legend entries, invalid rows, and corrupted data
 5. **Layout Drift Between Years** - The MY2023+ PDFs add an extra empty table column, so the assembly country has to be found by position-independent fallback (see `process_data` in `data_loader.py`)
 
+## The Static Site
+
+`site/` is plain HTML, CSS and JavaScript. It loads `site/data/vehicles.json` and draws every chart in the browser, so it needs no server, no framework and no outside requests (the Public Sans font files are included). The numbers match the Streamlit app: both read `data/nhtsa_data.csv`.
+
+To rebuild the JSON after the CSV changes:
+
+```bash
+python3 scripts/build_static.py
+```
+
+To look at it locally:
+
+```bash
+cd site
+python3 -m http.server 8000
+# then open http://localhost:8000
+```
+
+### Deploy on Cloudflare
+
+The site is a Cloudflare Worker with static assets. `wrangler.jsonc` already points at `site/`.
+
+1. In the Cloudflare dashboard, open **Workers & Pages**, choose **Create**, then **Import a repository**, and pick this repo.
+2. Name the Worker `car-maker-identifier`. Leave the build command empty and keep the default deploy command (`npx wrangler deploy`).
+3. After the first deploy, open the Worker, then **Settings**, **Domains & Routes**, **Add**, **Custom Domain**, and enter `cars.mitchell-pon.com`.
+
+Each push to `main` deploys again.
+
 ## Getting Started
 
 ### Prerequisites
@@ -92,7 +125,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Running the App
+### Running the Streamlit App
 
 ```bash
 # Run the Streamlit app
@@ -118,7 +151,7 @@ The interface follows the visual language of Swiss and Austrian railway timetabl
 - Flat bars with values printed at the bar ends instead of axes; the leader in each ranking is red
 - Sentence-case labels, a hairline-ruled grid, and no emoji or decorative icons
 
-`theme.py` holds the colours and CSS, `charts.py` holds the chart builders, and `.streamlit/config.toml` sets the Streamlit theme. The page loads Hanken Grotesk from Google Fonts and falls back to Helvetica or Arial when offline.
+`theme.py` holds the colours and CSS, `charts.py` holds the chart builders, and `.streamlit/config.toml` sets the Streamlit theme. The Streamlit page loads Hanken Grotesk from Google Fonts and falls back to Helvetica or Arial when offline. The static site uses Public Sans, served from `site/fonts/`.
 
 ## Project Structure
 
@@ -131,6 +164,15 @@ car-maker-identifier/
 ├── requirements.txt    # Python dependencies
 ├── .streamlit/
 │   └── config.toml     # Streamlit theme
+├── site/               # Static website (what Cloudflare serves)
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   ├── fonts/
+│   └── data/vehicles.json
+├── scripts/
+│   └── build_static.py # nhtsa_data.csv -> site/data/vehicles.json
+├── wrangler.jsonc      # Cloudflare Worker with static assets
 ├── data/
 │   ├── MY2020_AALA.pdf # NHTSA reports (2020-2026)
 │   ├── MY2021_AALA.pdf
