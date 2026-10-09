@@ -1,397 +1,242 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+"""Vehicle parts origin: explore NHTSA American Automobile Labeling Act (AALA) data."""
+
 from pathlib import Path
 
-# Page configuration
-st.set_page_config(
-    page_title="NHTSA Auto Parts Origin",
-    page_icon="🚗",
-    layout="wide"
-)
+import pandas as pd
+import streamlit as st
 
-# Country flag emojis mapping (based on NHTSA AALA document key)
-COUNTRY_FLAGS = {
-    "United States": "🇺🇸",
-    "Mexico": "🇲🇽",
-    "Canada": "🇨🇦",
-    "Japan": "🇯🇵",
-    "Germany": "🇩🇪",
-    "South Korea": "🇰🇷",
-    "United Kingdom": "🇬🇧",
-    "Italy": "🇮🇹",
-    "France": "🇫🇷",
-    "Sweden": "🇸🇪",
-    "Hungary": "🇭🇺",
-    "Austria": "🇦🇹",
-    "Belgium": "🇧🇪",
-    "China": "🇨🇳",
-    "Czech Republic": "🇨🇿",
-    "Finland": "🇫🇮",
-    "Spain": "🇪🇸",
-    "Slovakia": "🇸🇰",
-    "Turkey": "🇹🇷",
-    "Brazil": "🇧🇷",
-    "South Africa": "🇿🇦",
-    "Australia": "🇦🇺",
-    "Poland": "🇵🇱",
-    "Thailand": "🇹🇭",
-    "Indonesia": "🇮🇩",
-    "Malaysia": "🇲🇾",
-    "Argentina": "🇦🇷",
-    "Taiwan": "🇹🇼",
-    "Vietnam": "🇻🇳",
-    "India": "🇮🇳",
-    "Portugal": "🇵🇹",
-    "Netherlands": "🇳🇱",
-    "Russia": "🇷🇺",
-    "Serbia": "🇷🇸",
-    "Denmark": "🇩🇰",
-    "Philippines": "🇵🇭",
-    "Romania": "🇷🇴",
-    "Singapore": "🇸🇬",
-    "Cuba": "🇨🇺",
-    "Other": "🌍",
-}
+import charts
+import theme
+
+st.set_page_config(
+    page_title="Vehicle parts origin",
+    page_icon=":material/directions_car:",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+theme.apply()
+
+DATA_PATH = Path(__file__).parent / "data" / "nhtsa_data.csv"
+AALA_URL = "https://www.nhtsa.gov/part-583-american-automobile-labeling-act-reports"
+CONTENT_BANDS = [0, 10, 25, 50, 75, 100]
+CONTENT_LABELS = ["0–10%", "10–25%", "25–50%", "50–75%", "75–100%"]
+
 
 @st.cache_data
-def load_data():
-    """Load the NHTSA data"""
-    return pd.read_csv("data/nhtsa_data.csv")
+def load_data() -> pd.DataFrame:
+    # "Raw" holds the unparsed PDF row; it is only useful for debugging the loader.
+    return pd.read_csv(DATA_PATH).drop(columns=["Raw"], errors="ignore")
 
-def get_flag(country):
-    """Get flag emoji for country"""
-    if pd.isna(country) or country == "":
-        return ""
-    return COUNTRY_FLAGS.get(country, "🌍")
 
-# Load data
+def plot(fig, key: str) -> None:
+    # Streamlit derives a chart's ID from its content, so two identical charts (for example,
+    # engine and transmission sources that happen to match) collide unless each has its own key.
+    st.plotly_chart(fig, width="stretch", config=charts.PLOTLY_CONFIG, key=key)
+
+
+def ranked_counts(series: pd.Series, limit: int, unit: str = "vehicles"):
+    """Bar ranking of how often each value appears, ignoring blanks."""
+    counts = series.dropna()
+    counts = counts[counts != ""].value_counts().head(limit)
+    return charts.ranking(counts.index, counts.values, unit=unit)
+
+
+# ---------------------------------------------------------------- data and filters
+
 df = load_data()
 
-# Title and description
-st.title("🚗 NHTSA Vehicle Parts Origin Tracker")
-st.markdown("""
-Explore where vehicle parts come from based on the **American Automobile Labeling Act (AALA)** reports.
-View assembly locations, engine sources, transmission origins, and more across different manufacturers and years.
-""")
-
-# Sidebar filters
-st.sidebar.header("Filters")
-
-# Year filter
-years = sorted(df['Year'].unique())
-selected_years = st.sidebar.multiselect(
-    "Select Year(s)",
-    options=years,
-    default=[max(years)] if years else []
+theme.masthead(
+    f"Source: NHTSA AALA reports, model years {df['Year'].min()}–{df['Year'].max()}"
+)
+theme.title(
+    "Where vehicle parts come from",
+    "Every new passenger vehicle sold in the US carries a label that says where its "
+    "engine, transmission and final assembly come from. This tool reads those reports "
+    "so you can compare manufacturers, countries and model years.",
 )
 
-# Filter data by year
-filtered_df = df[df['Year'].isin(selected_years)] if selected_years else df
+years = sorted(df["Year"].unique())
 
-# Manufacturer filter
-manufacturers = sorted(filtered_df['Manufacturer'].dropna().unique())
-selected_manufacturers = st.sidebar.multiselect(
-    "Select Manufacturer(s)",
-    options=manufacturers,
-    default=[]
-)
+with st.container(key="filters"):
+    col_year, col_make, col_line = st.columns([1, 2, 1.4])
+    selected_years = col_year.multiselect(
+        "Model year", options=years, default=[max(years)], placeholder="All years"
+    )
+    in_years = df[df["Year"].isin(selected_years)] if selected_years else df
+    selected_makers = col_make.multiselect(
+        "Manufacturer",
+        options=sorted(in_years["Manufacturer"].dropna().unique()),
+        placeholder="All manufacturers",
+    )
+    car_line = col_line.text_input("Car line", placeholder="For example, Civic or F-150")
 
-# Apply manufacturer filter
-if selected_manufacturers:
-    filtered_df = filtered_df[filtered_df['Manufacturer'].isin(selected_manufacturers)]
-
-# Car Line search
-car_line_search = st.sidebar.text_input("Search Car Line")
-if car_line_search:
+filtered_df = in_years
+if selected_makers:
+    filtered_df = filtered_df[filtered_df["Manufacturer"].isin(selected_makers)]
+if car_line:
     filtered_df = filtered_df[
-        filtered_df['Car Line'].str.contains(car_line_search, case=False, na=False)
+        filtered_df["Car Line"].str.contains(car_line, case=False, na=False, regex=False)
     ]
 
-# Display metrics
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Total Vehicles", len(filtered_df))
-with col2:
-    st.metric("Manufacturers", filtered_df['Manufacturer'].nunique())
-with col3:
-    st.metric("Years Covered", filtered_df['Year'].nunique())
-
-# Tab layout
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Overview",
-    "🏭 Assembly Locations",
-    "⚙️ Component Origins",
-    "📈 Content Percentages",
-    "📋 Data Table"
-])
-
-with tab1:
-    st.header("Overview")
-    
-    # Top manufacturers by count
-    st.subheader("Top Manufacturers by Vehicle Count")
-    mfg_counts = filtered_df['Manufacturer'].value_counts().head(15)
-    fig_mfg = px.bar(
-        x=mfg_counts.values,
-        y=mfg_counts.index,
-        orientation='h',
-        labels={'x': 'Number of Vehicles', 'y': 'Manufacturer'},
-        title="Vehicle Count by Manufacturer"
+if filtered_df.empty:
+    theme.notice(
+        "No vehicles match these filters. Remove a manufacturer or clear the car line search."
     )
-    fig_mfg.update_layout(height=500)
-    st.plotly_chart(fig_mfg, use_container_width=True)
-    
-    # Trend over years
-    if len(selected_years) > 1 or not selected_years:
-        st.subheader("Vehicle Count Over Years")
-        year_counts = filtered_df.groupby('Year').size().reset_index(name='Count')
-        fig_trend = px.line(
-            year_counts,
-            x='Year',
-            y='Count',
-            markers=True,
-            title="Vehicle Models per Year"
-        )
-        st.plotly_chart(fig_trend, use_container_width=True)
+    st.stop()
 
-with tab2:
-    st.header("Assembly Locations")
-    
-    # Assembly country distribution
-    assembly_counts = filtered_df['Assembly Country'].value_counts().head(20)
-    
-    st.subheader("Top Assembly Countries")
-    
-    # Create bar chart with flags
-    fig_assembly = go.Figure()
-    fig_assembly.add_trace(go.Bar(
-        x=assembly_counts.values,
-        y=[f"{get_flag(country)} {country}" for country in assembly_counts.index],
-        orientation='h',
-        marker=dict(color='lightblue')
-    ))
-    fig_assembly.update_layout(
-        xaxis_title="Number of Vehicles",
-        yaxis_title="Assembly Country",
-        height=600
+theme.board(
+    [
+        (f"{len(filtered_df):,}", "Vehicle models in this selection", True),
+        (f"{filtered_df['Manufacturer'].nunique()}", "Manufacturers", False),
+        (f"{filtered_df['Year'].nunique()}", "Model years", False),
+        (f"{filtered_df['% US/Canada'].mean():.0f}%", "Average US and Canada parts content", False),
+    ]
+)
+
+# ---------------------------------------------------------------- tabs
+
+tab_overview, tab_assembly, tab_components, tab_content, tab_data = st.tabs(
+    ["Overview", "Assembly", "Engines and transmissions", "Parts content", "Data"]
+)
+
+with tab_overview:
+    theme.heading("Overview", "Models in the current selection, by manufacturer and over time.")
+
+    theme.heading("Models by manufacturer", "The 15 manufacturers with the most models in this selection.", 3)
+    plot(ranked_counts(filtered_df["Manufacturer"], 15, "models"), "overview_makers")
+
+    # The trend ignores the model-year filter so it always shows the full history.
+    trend_df = df
+    if selected_makers:
+        trend_df = trend_df[trend_df["Manufacturer"].isin(selected_makers)]
+    if car_line:
+        trend_df = trend_df[trend_df["Car Line"].str.contains(car_line, case=False, na=False, regex=False)]
+    per_year = trend_df.groupby("Year").size()
+    theme.heading(
+        "Models reported per model year",
+        "Covers all model years, whatever year is selected above. Reflects the manufacturer and car line filters.",
+        3,
     )
-    st.plotly_chart(fig_assembly, use_container_width=True)
+    plot(charts.trend(per_year.index, per_year.values, unit="models"), "overview_trend")
 
-with tab3:
-    st.header("Component Origins")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Engine Source Countries")
-        engine_counts = filtered_df['Engine Source'].value_counts().head(15)
-        fig_engine = px.pie(
-            values=engine_counts.values,
-            names=[f"{get_flag(c)} {c}" for c in engine_counts.index],
-            title="Engine Sources"
-        )
-        st.plotly_chart(fig_engine, use_container_width=True)
-    
-    with col2:
-        st.subheader("Transmission Source Countries")
-        trans_counts = filtered_df['Transmission Source'].value_counts().head(15)
-        fig_trans = px.pie(
-            values=trans_counts.values,
-            names=[f"{get_flag(c)} {c}" for c in trans_counts.index],
-            title="Transmission Sources"
-        )
-        st.plotly_chart(fig_trans, use_container_width=True)
+with tab_assembly:
+    theme.heading("Assembly", "Where the final vehicle is put together.")
 
-with tab4:
-    st.header("Content Percentages by Country")
-    st.markdown("""
-    This view shows the percentage of vehicle content sourced from different countries.
-    The **US/Canada Content** represents parts from North America, while **Primary** and **Secondary** countries 
-    show the main foreign sources of parts.
-    """)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # US/Canada Content Distribution
-        st.subheader("🇺🇸🇨🇦 US/Canada Content Distribution")
-        
-        # Create bins for US/Canada percentage
-        if '% US/Canada' in filtered_df.columns:
-            bins = [0, 10, 25, 50, 75, 100]
-            labels = ['0-10%', '10-25%', '25-50%', '50-75%', '75-100%']
-            filtered_df['Content Bin'] = pd.cut(
-                filtered_df['% US/Canada'], 
-                bins=bins, 
-                labels=labels, 
-                include_lowest=True
-            )
-            bin_counts = filtered_df['Content Bin'].value_counts().sort_index()
-            
-            fig_bins = px.bar(
-                x=bin_counts.index.astype(str),
-                y=bin_counts.values,
-                labels={'x': 'US/Canada Content %', 'y': 'Number of Vehicles'},
-                title="Vehicles by US/Canada Content Level",
-                color=bin_counts.values,
-                color_continuous_scale='RdYlGn'
-            )
-            fig_bins.update_layout(showlegend=False)
-            st.plotly_chart(fig_bins, use_container_width=True)
-    
-    with col2:
-        # Average US/Canada content by manufacturer
-        st.subheader("Average US/Canada Content by Manufacturer")
-        
-        if '% US/Canada' in filtered_df.columns:
-            avg_content = filtered_df.groupby('Manufacturer')['% US/Canada'].mean().sort_values(ascending=True)
-            avg_content = avg_content.tail(15)  # Top 15
-            
-            fig_avg = px.bar(
-                x=avg_content.values,
-                y=avg_content.index,
-                orientation='h',
-                labels={'x': 'Average % US/Canada', 'y': 'Manufacturer'},
-                title="Top 15 Manufacturers by US/Canada Content",
-                color=avg_content.values,
-                color_continuous_scale='RdYlGn'
-            )
-            fig_avg.update_layout(showlegend=False)
-            st.plotly_chart(fig_avg, use_container_width=True)
-    
-    # Primary source countries
-    st.subheader("🌍 Primary Source Countries (Excluding US/Canada)")
-    
-    if 'Primary Country' in filtered_df.columns:
-        # Get primary country contributions
-        primary_data = filtered_df[filtered_df['Primary Country'].notna() & (filtered_df['Primary Country'] != '')]
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            # Count of vehicles by primary country
-            primary_counts = primary_data['Primary Country'].value_counts().head(15)
-            
-            fig_primary = go.Figure()
-            fig_primary.add_trace(go.Bar(
-                x=primary_counts.values,
-                y=[f"{get_flag(c)} {c}" for c in primary_counts.index],
-                orientation='h',
-                marker=dict(color='steelblue')
-            ))
-            fig_primary.update_layout(
-                title="Vehicles by Primary Source Country",
-                xaxis_title="Number of Vehicles",
-                yaxis_title="Country",
-                height=500
-            )
-            st.plotly_chart(fig_primary, use_container_width=True)
-        
-        with col4:
-            # Average percentage by primary country
-            if 'Primary %' in filtered_df.columns:
-                avg_primary = primary_data.groupby('Primary Country')['Primary %'].mean().sort_values(ascending=False).head(15)
-                
-                fig_avg_primary = go.Figure()
-                fig_avg_primary.add_trace(go.Bar(
-                    x=[f"{get_flag(c)} {c}" for c in avg_primary.index],
-                    y=avg_primary.values,
-                    marker=dict(color='coral')
-                ))
-                fig_avg_primary.update_layout(
-                    title="Average Content % by Primary Country",
-                    xaxis_title="Country",
-                    yaxis_title="Average %",
-                    height=500
-                )
-                fig_avg_primary.update_xaxes(tickangle=45)
-                st.plotly_chart(fig_avg_primary, use_container_width=True)
-    
-    # Content breakdown for selected manufacturer
-    st.subheader("📊 Content Breakdown by Manufacturer")
-    
-    if selected_manufacturers and len(selected_manufacturers) == 1:
-        mfg = selected_manufacturers[0]
-        mfg_data = filtered_df[filtered_df['Manufacturer'] == mfg]
-        
-        # Calculate average content sources
-        avg_us_canada = mfg_data['% US/Canada'].mean() if '% US/Canada' in mfg_data.columns else 0
-        avg_primary = mfg_data['Primary %'].mean() if 'Primary %' in mfg_data.columns else 0
-        avg_secondary = mfg_data['Secondary %'].mean() if 'Secondary %' in mfg_data.columns else 0
-        other = max(0, 100 - avg_us_canada - avg_primary - avg_secondary)
-        
-        # Get most common primary country
-        primary_country = mfg_data['Primary Country'].mode().iloc[0] if len(mfg_data['Primary Country'].mode()) > 0 else "Other"
-        
-        fig_pie = px.pie(
-            values=[avg_us_canada, avg_primary, avg_secondary, other],
-            names=[f'🇺🇸🇨🇦 US/Canada ({avg_us_canada:.1f}%)', 
-                   f'{get_flag(primary_country)} {primary_country} ({avg_primary:.1f}%)',
-                   f'Secondary ({avg_secondary:.1f}%)',
-                   f'Other ({other:.1f}%)'],
-            title=f"Average Content Sources for {mfg}",
-            color_discrete_sequence=['#2ecc71', '#3498db', '#9b59b6', '#95a5a6']
+    assembly = filtered_df["Assembly Country"].dropna()
+    known = len(assembly)
+    if known < len(filtered_df):
+        theme.notice(
+            f"Assembly country is reported for {known:,} of {len(filtered_df):,} vehicles in this "
+            "selection. The rest are left out of this chart."
         )
-        st.plotly_chart(fig_pie, use_container_width=True)
-    else:
-        st.info("Select a single manufacturer from the sidebar to see detailed content breakdown.")
+    theme.heading("Vehicles by assembly country", "Top 20 countries.", 3)
+    plot(ranked_counts(assembly, 20), "assembly_countries")
 
-with tab5:
-    st.header("Data Table")
-    
-    # Display columns
-    display_cols = ['Year', 'Manufacturer', 'Car Line', '% US/Canada',
-                   'Primary Country', 'Primary %', 'Secondary Country', 'Secondary %',
-                   'Engine Source', 'Transmission Source', 'Assembly Country']
-    
-    # Filter to only existing columns
-    display_cols = [col for col in display_cols if col in filtered_df.columns]
-    
-    # Add flags to countries in the table
-    display_df = filtered_df[display_cols].copy()
-    
-    if 'Assembly Country' in display_df.columns:
-        display_df['Assembly Country'] = display_df['Assembly Country'].apply(
-            lambda x: f"{get_flag(x)} {x}" if pd.notna(x) else ""
+with tab_components:
+    theme.heading("Engines and transmissions", "The country each major component comes from.")
+
+    col_engine, col_trans = st.columns(2)
+    with col_engine:
+        theme.heading("Engine source", "Top 10 countries.", 3)
+        plot(ranked_counts(filtered_df["Engine Source"], 10), "engine_sources")
+    with col_trans:
+        theme.heading("Transmission source", "Top 10 countries.", 3)
+        plot(ranked_counts(filtered_df["Transmission Source"], 10), "transmission_sources")
+
+with tab_content:
+    theme.heading(
+        "Parts content",
+        "The label lists the share of parts from the US and Canada, plus up to two other "
+        "countries that supply the most.",
+    )
+
+    col_bands, col_makers = st.columns(2)
+    with col_bands:
+        theme.heading("US and Canada content", "How many vehicles fall in each band.", 3)
+        bands = pd.cut(
+            filtered_df["% US/Canada"], bins=CONTENT_BANDS, labels=CONTENT_LABELS, include_lowest=True
+        ).value_counts().sort_index()
+        plot(charts.columns(CONTENT_LABELS, bands.values, unit="vehicles"), "content_bands")
+
+    with col_makers:
+        theme.heading("Highest US and Canada content", "Average by manufacturer, top 15.", 3)
+        avg_content = (
+            filtered_df.groupby("Manufacturer")["% US/Canada"].mean().sort_values(ascending=False).head(15)
         )
-    
-    if 'Engine Source' in display_df.columns:
-        display_df['Engine Source'] = display_df['Engine Source'].apply(
-            lambda x: f"{get_flag(x)} {x}" if pd.notna(x) else ""
+        plot(charts.ranking(avg_content.index, avg_content.values, unit="average", suffix="%"), "content_makers")
+
+    primary = filtered_df[filtered_df["Primary Country"].notna() & (filtered_df["Primary Country"] != "")]
+    col_main, col_share = st.columns(2)
+    with col_main:
+        theme.heading("Largest foreign source", "Vehicles by the country supplying the most non-US parts, top 15.", 3)
+        plot(ranked_counts(primary["Primary Country"], 15), "content_primary_count")
+    with col_share:
+        theme.heading("Share from that country", "Average percent of parts content, top 15.", 3)
+        avg_primary = (
+            primary.groupby("Primary Country")["Primary %"].mean().sort_values(ascending=False).head(15)
         )
-    
-    if 'Transmission Source' in display_df.columns:
-        display_df['Transmission Source'] = display_df['Transmission Source'].apply(
-            lambda x: f"{get_flag(x)} {x}" if pd.notna(x) else ""
-        )
-    
-    if 'Primary Country' in display_df.columns:
-        display_df['Primary Country'] = display_df['Primary Country'].apply(
-            lambda x: f"{get_flag(x)} {x}" if pd.notna(x) and x != "" else ""
-        )
-    
-    if 'Secondary Country' in display_df.columns:
-        display_df['Secondary Country'] = display_df['Secondary Country'].apply(
-            lambda x: f"{get_flag(x)} {x}" if pd.notna(x) and x != "" else ""
-        )
-    
-    st.dataframe(display_df, use_container_width=True, height=600)
-    
-    # Download button
-    csv = filtered_df.to_csv(index=False)
+        plot(charts.ranking(avg_primary.index, avg_primary.values, unit="average", suffix="%"), "content_primary_share")
+
+    theme.heading("Content breakdown for one manufacturer", level=3)
+    makers = sorted(filtered_df["Manufacturer"].unique())
+    largest = filtered_df["Manufacturer"].value_counts().idxmax()
+    maker = st.selectbox("Manufacturer", makers, index=makers.index(largest), key="breakdown_maker")
+
+    rows = filtered_df[filtered_df["Manufacturer"] == maker]
+    us_canada = rows["% US/Canada"].mean()
+    main_pct = rows["Primary %"].mean()
+    second_pct = rows["Secondary %"].mean()
+    other = max(0.0, 100 - us_canada - main_pct - second_pct)
+    main_country = rows["Primary Country"].mode()
+    main_country = main_country.iloc[0] if len(main_country) else "not itemized"
+    segments = charts.composition_segments(
+        us_canada, main_pct, second_pct, other, main_country=main_country
+    )
+    theme.legend([(name, color) for name, _, color, _ in segments])
+    plot(charts.composition(segments), "content_breakdown")
+
+with tab_data:
+    theme.heading("Data", f"{len(filtered_df):,} vehicles match the filters above.")
+
+    columns = [
+        "Year", "Manufacturer", "Car Line", "% US/Canada", "Primary Country", "Primary %",
+        "Secondary Country", "Secondary %", "Engine Source", "Transmission Source", "Assembly Country",
+    ]
+    table = filtered_df[columns].copy()
+    # A share of 0% next to an empty country means "not listed", so show it blank.
+    for country, share in [("Primary Country", "Primary %"), ("Secondary Country", "Secondary %")]:
+        table[share] = table[share].astype("Int64").mask(table[country].isna() | (table[country] == ""))
+    st.dataframe(
+        table.fillna({c: "" for c in table.select_dtypes(exclude="number").columns}),
+        hide_index=True,
+        width="stretch",
+        height=560,
+        column_config={
+            "Year": st.column_config.NumberColumn("Year", format="%d", width=64),
+            "Manufacturer": st.column_config.TextColumn("Manufacturer", width=130),
+            "Car Line": st.column_config.TextColumn("Car line", width=160),
+            "% US/Canada": st.column_config.ProgressColumn(
+                "US/Canada", min_value=0, max_value=100, format="%d%%", width=110
+            ),
+            "Primary Country": st.column_config.TextColumn("Main source", width=110),
+            "Primary %": st.column_config.NumberColumn("Share", format="%d%%", width=64),
+            "Secondary Country": st.column_config.TextColumn("Second source", width=120),
+            "Secondary %": st.column_config.NumberColumn("Share", format="%d%%", width=64),
+            "Engine Source": st.column_config.TextColumn("Engine", width=100),
+            "Transmission Source": st.column_config.TextColumn("Transmission", width=120),
+            "Assembly Country": st.column_config.TextColumn("Assembled in", width=110),
+        },
+    )
     st.download_button(
-        label="📥 Download Filtered Data as CSV",
-        data=csv,
+        "Download filtered data (CSV)",
+        data=filtered_df.to_csv(index=False),
         file_name="nhtsa_filtered_data.csv",
         mime="text/csv",
     )
 
-# Footer
-st.markdown("---")
-st.markdown("""
-**Data Source:** [NHTSA Part 583 American Automobile Labeling Act Reports](https://www.nhtsa.gov/part-583-american-automobile-labeling-act-reports)
-
-**Note:** Country codes have been normalized (e.g., MEX/MX → Mexico). Some ambiguous codes like "CH" have been interpreted based on context.
-""")
+theme.footer(
+    f'<p>Data: <a href="{AALA_URL}">NHTSA Part 583 American Automobile Labeling Act reports</a>.</p>'
+    "<p>Country codes in the PDFs are normalized to full names (for example, MEX and MX become Mexico). "
+    "Some ambiguous codes, such as CH, are interpreted from context. Blank values mean the report left "
+    "the field empty or the parser could not read it.</p>"
+)
