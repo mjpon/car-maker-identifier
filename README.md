@@ -99,7 +99,7 @@ The site is a Cloudflare Worker with static assets. `wrangler.jsonc` already poi
 
 1. In the Cloudflare dashboard, open **Workers & Pages**, choose **Create**, then **Import a repository**, and pick this repo.
 2. Name the Worker `car-maker-identifier`. Leave the build command empty and keep the default deploy command (`npx wrangler deploy`).
-3. After the first deploy, open the Worker, then **Settings**, **Domains & Routes**, **Add**, **Custom Domain**, and enter `cars.mitchell-pon.com`.
+3. The address `cars.mitchell-pon.com` is set in `wrangler.jsonc` (`routes`), so each deploy attaches it and creates its DNS record. Nothing to add by hand.
 
 Each push to `main` deploys again.
 
