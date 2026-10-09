@@ -192,6 +192,15 @@ This is just the beginning! Potential future enhancements:
 - Add EV-specific analysis (battery origins)
 - API endpoint for programmatic access
 
+## Security
+
+- `site/_headers` sets a strict Content-Security-Policy and other security headers on the static site. Cloudflare reads it and applies it to every page. The Streamlit app is not part of the live site.
+- `.github/workflows/security.yml` runs on every push and pull request, and once a week. It scans the whole git history for committed secrets (gitleaks), checks the headers (`python3 scripts/check_headers.py site`), checks that `site/data/vehicles.json` still matches the CSV, and scans the code with CodeQL (`codeql.yml`). Reports from CodeQL appear under the repo's Security tab.
+- Dependabot opens pull requests when a pinned action or package has an update.
+- If a change adds an inline `<script>` to a page, the headers check prints the hash to add to the policy. Do not loosen the policy to make it pass.
+- Keep secrets out of the repo. Keys and tokens belong in the Worker's **Variables & Secrets** settings. `.gitignore` skips `.env` files.
+
+
 ## License
 
 MIT License - feel free to use, modify, and distribute.

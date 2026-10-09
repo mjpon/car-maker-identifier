@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keeps the pinned actions in .github/workflows up to date.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  # Python packages for the Streamlit app.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

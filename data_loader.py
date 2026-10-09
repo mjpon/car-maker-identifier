@@ -207,7 +207,7 @@ def get_pdf_url_from_landing_page(landing_url):
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
-        response = requests.get(landing_url, headers=headers)
+        response = requests.get(landing_url, headers=headers, timeout=30)
         if response.status_code != 200:
             print(f"Failed to access landing page {landing_url}. Status: {response.status_code}")
             return None
@@ -246,7 +246,7 @@ def download_pdf(url, path):
         "Referer": "https://www.nhtsa.gov/"
     }
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=60)
         if response.status_code == 200:
             with open(path, 'wb') as f:
                 f.write(response.content)

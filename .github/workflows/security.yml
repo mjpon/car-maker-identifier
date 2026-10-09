@@ -1,0 +1,59 @@
+# Checks that run on every push and pull request, and once a week.
+# Nothing here can change the repo or the live site: the token is read-only.
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Looks through the whole git history for keys, tokens and passwords.
+      # The release is pinned by checksum. Bump both lines together to update it.
+      - name: Secret scan (gitleaks)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/gitleaks" detect --source . --redact --no-banner --exit-code 1
+
+      # The _headers file holds the Content-Security-Policy. This fails if the policy
+      # gets loose, or if a page gains an inline script the policy does not list.
+      - name: Security headers
+        run: python3 scripts/check_headers.py site
+
+      # What is committed in site/data/ is exactly what gets served, so it must match its source.
+      - name: Site data matches the CSV
+        run: |
+          python3 scripts/build_static.py
+          if [ -n "$(git status --porcelain -- site/data)" ]; then
+            git status --short -- site/data
+            echo "site/data/ is out of date. Run: python3 scripts/build_static.py, then commit the result."
+            exit 1
+          fi
