@@ -6,7 +6,7 @@ Explore where vehicle parts come from, based on the **American Automobile Labeli
 
 It comes in two forms that read the same data:
 
-- **A static website** in `site/`, published on Cloudflare at **https://cars.mitchell-pon.com**. No server, no account, nothing to install.
+- **A static website** in `site/`, live at **https://cars.mitchell-pon.com**. No server, no account, nothing to install.
 - **A Streamlit app** (`app.py`) for running locally.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -93,16 +93,6 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-### Deploy on Cloudflare
-
-The site is a Cloudflare Worker with static assets. `wrangler.jsonc` already points at `site/`.
-
-1. In the Cloudflare dashboard, open **Workers & Pages**, choose **Create**, then **Import a repository**, and pick this repo.
-2. Name the Worker `car-maker-identifier`. Leave the build command empty and keep the default deploy command (`npx wrangler deploy`).
-3. The address `cars.mitchell-pon.com` is set in `wrangler.jsonc` (`routes`), so each deploy attaches it and creates its DNS record. Nothing to add by hand.
-
-Each push to `main` deploys again.
-
 ## Getting Started
 
 ### Prerequisites
@@ -164,7 +154,7 @@ car-maker-identifier/
 ├── requirements.txt    # Python dependencies
 ├── .streamlit/
 │   └── config.toml     # Streamlit theme
-├── site/               # Static website (what Cloudflare serves)
+├── site/               # Static website
 │   ├── index.html
 │   ├── app.js
 │   ├── styles.css
@@ -172,7 +162,6 @@ car-maker-identifier/
 │   └── data/vehicles.json
 ├── scripts/
 │   └── build_static.py # nhtsa_data.csv -> site/data/vehicles.json
-├── wrangler.jsonc      # Cloudflare Worker with static assets
 ├── data/
 │   ├── MY2020_AALA.pdf # NHTSA reports (2020-2026)
 │   ├── MY2021_AALA.pdf
@@ -191,15 +180,6 @@ This is just the beginning! Potential future enhancements:
 - Visualize supply chain on a world map
 - Add EV-specific analysis (battery origins)
 - API endpoint for programmatic access
-
-## Security
-
-- `site/_headers` sets a strict Content-Security-Policy and other security headers on the static site. Cloudflare reads it and applies it to every page. The Streamlit app is not part of the live site.
-- `.github/workflows/security.yml` runs on every push and pull request, and once a week. It scans the whole git history for committed secrets (gitleaks), checks the headers (`python3 scripts/check_headers.py site`), checks that `site/data/vehicles.json` still matches the CSV, and scans the code with CodeQL (`codeql.yml`). Reports from CodeQL appear under the repo's Security tab.
-- Dependabot opens pull requests when a pinned action or package has an update.
-- If a change adds an inline `<script>` to a page, the headers check prints the hash to add to the policy. Do not loosen the policy to make it pass.
-- Keep secrets out of the repo. Keys and tokens belong in the Worker's **Variables & Secrets** settings. `.gitignore` skips `.env` files.
-
 
 ## License
 

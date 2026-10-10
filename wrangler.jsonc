@@ -1,7 +1,6 @@
 {
   "name": "car-maker-identifier",
   "compatibility_date": "2026-10-09",
-  // The deploy attaches this address (and creates its DNS record), so nothing has to be added by hand.
   "routes": [
     { "pattern": "cars.mitchell-pon.com", "custom_domain": true }
   ],
