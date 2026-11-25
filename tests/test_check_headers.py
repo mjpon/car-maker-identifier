@@ -71,6 +71,18 @@ class InlineScriptsUnitTests(unittest.TestCase):
         self.assertEqual(check_headers.inline_scripts("<script/>foo();</script>"), ["foo();"])
         self.assertEqual(check_headers.inline_scripts('<script src="a.js"/>bar();</script>'), [])
 
+    def test_cdata_outside_foreign_content_ends_at_first_gt(self):
+        html = "<!doctype html><body><![CDATA[><script>alert(1);</script>]]>"
+        self.assertEqual(check_headers.inline_scripts(html), ["alert(1);"])
+
+    def test_other_marked_section_ends_at_first_gt(self):
+        html = "<![if x]><script>a();</script><![endif]>"
+        self.assertEqual(check_headers.inline_scripts(html), ["a();"])
+
+    def test_cdata_inside_svg_is_text(self):
+        html = "<svg><![CDATA[<script>x();</script>]]></svg><script>y();</script>"
+        self.assertEqual(check_headers.inline_scripts(html), ["y();"])
+
 
 class CheckHeadersMainTests(unittest.TestCase):
     def test_inline_script_hash_present(self):
@@ -138,6 +150,21 @@ class CheckHeadersMainTests(unittest.TestCase):
     def test_real_repo_site_folder_passes(self):
         site_dir = REPO_ROOT / "site"
         code, out = run_check(site_dir)
+        self.assertEqual(code, 0, out)
+
+    def test_script_after_cdata_declaration_needs_hash(self):
+        html = "<!doctype html><body><![CDATA[><script>alert(1);</script>]]>"
+
+        code, out = check_temp_site(html)
+        self.assertEqual(code, 1)
+        self.assertIn("inline script not in the policy", out)
+
+        code, out = check_temp_site(html, [check_headers.script_hash("alert(1);")])
+        self.assertEqual(code, 0, out)
+
+    def test_ordinary_hashed_script_control(self):
+        html = "<!doctype html><body><script>ok();</script>"
+        code, out = check_temp_site(html, [check_headers.script_hash("ok();")])
         self.assertEqual(code, 0, out)
 
 

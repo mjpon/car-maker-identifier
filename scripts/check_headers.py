@@ -29,8 +29,18 @@ class InlineScripts(HTMLParser):
         super().__init__(convert_charrefs=False)
         self.scripts = []
         self._chunks = None
+        self._foreign = 0
+
+    def parse_html_declaration(self, i):
+        # Outside SVG/MathML foreign content, browsers treat "<![..." as a bogus
+        # comment ending at the first ">", not a marked section ending at "]]>".
+        if self.rawdata.startswith("<![", i) and not self._foreign:
+            return self.parse_bogus_comment(i)
+        return super().parse_html_declaration(i)
 
     def handle_starttag(self, tag, attrs):
+        if tag.lower() in ("svg", "math"):
+            self._foreign += 1
         if tag.lower() == "script" and not any(name.lower() == "src" for name, _ in attrs):
             self._chunks = []
 
@@ -47,6 +57,8 @@ class InlineScripts(HTMLParser):
             self._chunks.append(data)
 
     def handle_endtag(self, tag):
+        if tag.lower() in ("svg", "math") and self._foreign:
+            self._foreign -= 1
         if tag.lower() == "script" and self._chunks is not None:
             self.scripts.append("".join(self._chunks))
             self._chunks = None
