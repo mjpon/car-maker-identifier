@@ -67,6 +67,10 @@ class InlineScriptsUnitTests(unittest.TestCase):
         body = "if (a < b && c > d) { const s = '&amp;'; }"
         self.assertEqual(check_headers.inline_scripts(f"<script>{body}</script>"), [body])
 
+    def test_self_closing_script_tag_keeps_body(self):
+        self.assertEqual(check_headers.inline_scripts("<script/>foo();</script>"), ["foo();"])
+        self.assertEqual(check_headers.inline_scripts('<script src="a.js"/>bar();</script>'), [])
+
 
 class CheckHeadersMainTests(unittest.TestCase):
     def test_inline_script_hash_present(self):
@@ -83,6 +87,17 @@ class CheckHeadersMainTests(unittest.TestCase):
     def test_closing_tag_with_space_detected_and_allowed_when_hashed(self):
         body = "alert(1);"
         html = f"<script>{body}</script >"
+
+        code, out = check_temp_site(html)
+        self.assertEqual(code, 1)
+        self.assertIn("inline script not in the policy", out)
+
+        code, out = check_temp_site(html, [check_headers.script_hash(body)])
+        self.assertEqual(code, 0, out)
+
+    def test_self_closing_script_tag_detected_and_allowed_when_hashed(self):
+        body = "foo();"
+        html = f"<script/>{body}</script>"
 
         code, out = check_temp_site(html)
         self.assertEqual(code, 1)

@@ -63,15 +63,16 @@ jobs:
           fi
 
       # Checks requirements.txt against the OSV vulnerability database.
-      # Report only: findings go to the job summary and never fail the build.
-      # The release is pinned by checksum. Bump both lines together to update it.
+      # The binary is verified by checksum and the step stops before running it on a mismatch.
+      # Report only: findings go to the job summary and the step never fails the build (continue-on-error).
+      # Bump both lines together to update the release.
       - name: Dependency scan (OSV-Scanner, report only)
         continue-on-error: true
         run: |
-          set -uo pipefail
+          set -euo pipefail
           cd "$RUNNER_TEMP"
           curl -sSfL -o osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
-          echo "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner" | sha256sum -c - || exit 0
+          echo "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner" | sha256sum -c -
           chmod +x osv-scanner
           cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/osv-scanner" scan source --recursive --allow-no-lockfiles --format markdown --output-file "$RUNNER_TEMP/osv.md" . || true

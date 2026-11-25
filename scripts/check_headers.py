@@ -34,6 +34,14 @@ class InlineScripts(HTMLParser):
         if tag.lower() == "script" and not any(name.lower() == "src" for name, _ in attrs):
             self._chunks = []
 
+    def handle_startendtag(self, tag, attrs):
+        if tag.lower() == "script":
+            self.handle_starttag(tag, attrs)
+            self.set_cdata_mode(tag)
+        else:
+            self.handle_starttag(tag, attrs)
+            self.handle_endtag(tag)
+
     def handle_data(self, data):
         if self._chunks is not None:
             self._chunks.append(data)
