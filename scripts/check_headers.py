@@ -16,9 +16,43 @@ import base64
 import hashlib
 import re
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 REQUIRED = ["content-security-policy", "x-content-type-options", "referrer-policy", "x-frame-options", "permissions-policy"]
+
+
+class InlineScripts(HTMLParser):
+    """Collects the raw bodies of inline <script> elements (those without a src attribute)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.scripts = []
+        self._chunks = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "script" and not any(name.lower() == "src" for name, _ in attrs):
+            self._chunks = []
+
+    def handle_data(self, data):
+        if self._chunks is not None:
+            self._chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "script" and self._chunks is not None:
+            self.scripts.append("".join(self._chunks))
+            self._chunks = None
+
+
+def inline_scripts(text: str) -> list[str]:
+    parser = InlineScripts()
+    parser.feed(text)
+    parser.close()
+    return parser.scripts
+
+
+def script_hash(body: str) -> str:
+    return "sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode()
 
 
 def read_global_headers(path):
@@ -66,13 +100,13 @@ def main(argv):
     allowed = {item.strip("'") for item in script_src if item.startswith("'sha256-")}
 
     seen = 0
+    used = set()
     for page in sorted(folder.rglob("*.html")):
         text = page.read_text(encoding="utf-8")
-        for match in re.finditer(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>", text, re.S | re.I):
-            if re.search(r"\bsrc\s*=", match.group("attrs")):
-                continue
+        for body in inline_scripts(text):
             seen += 1
-            digest = "sha256-" + base64.b64encode(hashlib.sha256(match.group("body").encode("utf-8")).digest()).decode()
+            digest = script_hash(body)
+            used.add(digest)
             if digest not in allowed:
                 problems.append(f"{page.relative_to(folder)}: inline script not in the policy, add '{digest}'")
         if re.search(r"""\son(click|load|error|change|input|submit|focus|blur|key\w*|mouse\w*)\s*=""", text, re.I):
@@ -80,12 +114,7 @@ def main(argv):
         if re.search(r"""(href|src)\s*=\s*["']\s*javascript:""", text, re.I):
             problems.append(f"{page.relative_to(folder)}: has a javascript: link, which the policy blocks")
 
-    stale = allowed - {
-        "sha256-" + base64.b64encode(hashlib.sha256(m.group("body").encode("utf-8")).digest()).decode()
-        for page in folder.rglob("*.html")
-        for m in re.finditer(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script>", page.read_text(encoding="utf-8"), re.S | re.I)
-        if not re.search(r"\bsrc\s*=", m.group("attrs"))
-    }
+    stale = allowed - used
     for item in sorted(stale):
         print(f"note: the policy lists a hash no page uses: '{item}'")
 
