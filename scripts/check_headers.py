@@ -70,7 +70,12 @@ class InlineScripts(HTMLParser):
         ):
             while self._in_foreign():
                 self._stack.pop()
-        self._foreign_start = self._in_foreign()
+        self._foreign_start = self._in_foreign() or (
+            bool(self._stack)
+            and self._stack[-1][1] == "math"
+            and self._stack[-1][0] in MATH_TEXT_POINTS
+            and tag in ("mglyph", "malignmark")
+        )
         if self._foreign_start:
             ns = "svg" if tag == "svg" else self._stack[-1][1]
             if ns == "svg":

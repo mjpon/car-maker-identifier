@@ -116,6 +116,32 @@ class InlineScriptsUnitTests(unittest.TestCase):
             ["c()"],
         )
 
+    def test_math_text_point_keeps_mglyph_foreign(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<math><mi><mglyph><style></mglyph></math><script>alert(1)</script>"),
+            ["alert(1)"],
+        )
+
+    def test_math_text_point_keeps_malignmark_foreign(self):
+        self.assertEqual(
+            check_headers.inline_scripts(
+                "<math><mi><malignmark><style></malignmark></math><script>alert(1)</script>"
+            ),
+            ["alert(1)"],
+        )
+
+    def test_math_text_point_other_tags_stay_html(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<math><mi><span><style><script>x()</script></style>"),
+            [],
+        )
+
+    def test_mglyph_outside_text_point_unaffected(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<math><mglyph><style></mglyph></math><script>g()</script>"),
+            ["g()"],
+        )
+
     def test_foreignobject_integration_point(self):
         self.assertEqual(
             check_headers.inline_scripts(
