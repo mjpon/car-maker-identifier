@@ -83,6 +83,91 @@ class InlineScriptsUnitTests(unittest.TestCase):
         html = "<svg><![CDATA[<script>x();</script>]]></svg><script>y();</script>"
         self.assertEqual(check_headers.inline_scripts(html), ["y();"])
 
+    def test_svg_style_does_not_hide_following_script(self):
+        html = "<!doctype html><body><svg><style></svg><script>alert(1)</script>"
+        self.assertEqual(check_headers.inline_scripts(html), ["alert(1)"])
+
+    def test_html_style_control(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<style></style><script>a()</script><style>b{}</style>"),
+            ["a()"],
+        )
+        self.assertEqual(check_headers.inline_scripts("<style><script>x()</script></style>"), [])
+
+    def test_nested_svg(self):
+        html = "<svg><g><svg><style></style></svg><style></svg><script>n()</script>"
+        self.assertEqual(check_headers.inline_scripts(html), ["n()"])
+
+    def test_math_style_and_annotation_xml(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<math><style></math><script>m()</script>"),
+            ["m()"],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts(
+                '<math><annotation-xml encoding="text/html"><style><script>h()</script></style></annotation-xml></math>'
+            ),
+            [],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts(
+                '<math><annotation-xml encoding="text/html"><![CDATA[><script>c()</script>]]></annotation-xml></math>'
+            ),
+            ["c()"],
+        )
+
+    def test_foreignobject_integration_point(self):
+        self.assertEqual(
+            check_headers.inline_scripts(
+                "<svg><foreignObject><style><script>s()</script></style></foreignObject></svg>"
+            ),
+            [],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts(
+                "<svg><foreignObject><![CDATA[><script>f()</script>]]></foreignObject></svg>"
+            ),
+            ["f()"],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts(
+                "<svg><foreignObject></foreignObject><style></svg><script>after()</script>"
+            ),
+            ["after()"],
+        )
+
+    def test_cdata_in_svg_still_text(self):
+        html = "<svg><![CDATA[<script>x()</script>]]></svg><script>y()</script>"
+        self.assertEqual(check_headers.inline_scripts(html), ["y()"])
+
+    def test_breakout_tag_leaves_foreign_content(self):
+        self.assertEqual(
+            check_headers.inline_scripts("<svg><div><![CDATA[><script>b()</script>]]>"),
+            ["b()"],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts('<svg><font color="red"><style></style><script>k()</script>'),
+            ["k()"],
+        )
+        self.assertEqual(
+            check_headers.inline_scripts("<svg><p><style><script>z()</script></style>"),
+            [],
+        )
+
+    def test_self_closing_svg_does_not_stick(self):
+        html = "<svg/><style><script>q()</script></style><![CDATA[><script>r()</script>]]>"
+        self.assertEqual(check_headers.inline_scripts(html), ["r()"])
+
+    def test_svg_script_still_collected(self):
+        self.assertEqual(check_headers.inline_scripts("<svg><script>v()</script></svg>"), ["v()"])
+
+    def test_page_without_foreign_content_unchanged(self):
+        html = (
+            "<!doctype html><html><head><style>p{}</style><script>one()</script></head>"
+            '<body><p>hi</p><script src="x.js"></script><script>two()</script></body></html>'
+        )
+        self.assertEqual(check_headers.inline_scripts(html), ["one()", "two()"])
+
 
 class CheckHeadersMainTests(unittest.TestCase):
     def test_inline_script_hash_present(self):
@@ -165,6 +250,16 @@ class CheckHeadersMainTests(unittest.TestCase):
     def test_ordinary_hashed_script_control(self):
         html = "<!doctype html><body><script>ok();</script>"
         code, out = check_temp_site(html, [check_headers.script_hash("ok();")])
+        self.assertEqual(code, 0, out)
+
+    def test_script_after_svg_style_needs_hash(self):
+        html = "<!doctype html><body><svg><style></svg><script>alert(1)</script>"
+
+        code, out = check_temp_site(html)
+        self.assertEqual(code, 1)
+        self.assertIn("inline script not in the policy", out)
+
+        code, out = check_temp_site(html, [check_headers.script_hash("alert(1)")])
         self.assertEqual(code, 0, out)
 
 

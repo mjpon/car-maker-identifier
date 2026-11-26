@@ -22,26 +22,72 @@ from pathlib import Path
 REQUIRED = ["content-security-policy", "x-content-type-options", "referrer-policy", "x-frame-options", "permissions-policy"]
 
 
+BREAKOUT_TAGS = frozenset(
+    "b big blockquote body br center code dd div dl dt em embed h1 h2 h3 h4 h5 h6 head hr i img li listing menu meta nobr ol p pre ruby s small span strong strike sub sup table tt u ul var".split()
+)
+SVG_HTML_POINTS = frozenset({"foreignobject", "desc", "title"})
+MATH_TEXT_POINTS = frozenset({"mi", "mo", "mn", "ms", "mtext"})
+
+
 class InlineScripts(HTMLParser):
-    """Collects the raw bodies of inline <script> elements (those without a src attribute)."""
+    """Collects the raw bodies of inline <script> elements (those without a src attribute).
+
+    Tracks a stack of open SVG/MathML foreign elements, HTML integration points, and
+    HTML breakout tags so foreign elements like <style> do not switch into raw-text
+    mode and CDATA sections only apply inside foreign content.
+    """
 
     def __init__(self):
         super().__init__(convert_charrefs=False)
         self.scripts = []
         self._chunks = None
-        self._foreign = 0
+        self._stack = []  # open foreign elements: (tag, namespace, is_html_point)
+        self._foreign_start = False
+
+    def _in_foreign(self):
+        return bool(self._stack) and not self._stack[-1][2]
 
     def parse_html_declaration(self, i):
-        # Outside SVG/MathML foreign content, browsers treat "<![..." as a bogus
-        # comment ending at the first ">", not a marked section ending at "]]>".
-        if self.rawdata.startswith("<![", i) and not self._foreign:
+        # Real CDATA sections only apply inside foreign content; elsewhere (including
+        # integration points) treat "<![..." as a bogus comment ending at the first ">".
+        if self.rawdata.startswith("<![", i):
+            if self.rawdata.startswith("<![CDATA[", i) and self._in_foreign():
+                return super().parse_html_declaration(i)
             return self.parse_bogus_comment(i)
         return super().parse_html_declaration(i)
 
+    def set_cdata_mode(self, elem, *args, **kwargs):
+        # Foreign elements never enter raw-text mode; SVG <script> stays collected as today.
+        if self._foreign_start and elem.lower() != "script":
+            return
+        return super().set_cdata_mode(elem, *args, **kwargs)
+
     def handle_starttag(self, tag, attrs):
-        if tag.lower() in ("svg", "math"):
-            self._foreign += 1
-        if tag.lower() == "script" and not any(name.lower() == "src" for name, _ in attrs):
+        tag = tag.lower()
+        if self._in_foreign() and (
+            tag in BREAKOUT_TAGS
+            or (tag == "font" and any(n.lower() in ("color", "face", "size") for n, _ in attrs))
+        ):
+            while self._in_foreign():
+                self._stack.pop()
+        self._foreign_start = self._in_foreign()
+        if self._foreign_start:
+            ns = "svg" if tag == "svg" else self._stack[-1][1]
+            if ns == "svg":
+                point = tag in SVG_HTML_POINTS
+            else:
+                point = tag in MATH_TEXT_POINTS or (
+                    tag == "annotation-xml"
+                    and any(
+                        n.lower() == "encoding"
+                        and (v or "").strip().lower() in ("text/html", "application/xhtml+xml")
+                        for n, v in attrs
+                    )
+                )
+            self._stack.append((tag, ns, point))
+        elif tag in ("svg", "math"):
+            self._stack.append((tag, tag, False))
+        if tag == "script" and not any(name.lower() == "src" for name, _ in attrs):
             self._chunks = []
 
     def handle_startendtag(self, tag, attrs):
@@ -57,9 +103,16 @@ class InlineScripts(HTMLParser):
             self._chunks.append(data)
 
     def handle_endtag(self, tag):
-        if tag.lower() in ("svg", "math") and self._foreign:
-            self._foreign -= 1
-        if tag.lower() == "script" and self._chunks is not None:
+        tag = tag.lower()
+        if self._in_foreign() and tag in ("br", "p"):
+            while self._in_foreign():
+                self._stack.pop()
+        else:
+            for j in range(len(self._stack) - 1, -1, -1):
+                if self._stack[j][0] == tag:
+                    del self._stack[j:]
+                    break
+        if tag == "script" and self._chunks is not None:
             self.scripts.append("".join(self._chunks))
             self._chunks = None
 
