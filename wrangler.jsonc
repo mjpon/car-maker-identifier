@@ -7,5 +7,7 @@
   "assets": {
     "directory": "./site",
     "not_found_handling": "404-page"
-  }
+  },
+  // Branch builds need this block to make a preview. It can stay empty
+  "previews": {}
 }
