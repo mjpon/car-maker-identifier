@@ -48,6 +48,10 @@ jobs:
       - name: Security headers
         run: python3 scripts/check_headers.py site
 
+      # Unit tests for the header checker. Standard library only.
+      - name: Header checker tests
+        run: python3 -m unittest discover -s tests
+
       # What is committed in site/data/ is exactly what gets served, so it must match its source.
       - name: Site data matches the CSV
         run: |
@@ -57,3 +61,19 @@ jobs:
             echo "site/data/ is out of date. Run: python3 scripts/build_static.py, then commit the result."
             exit 1
           fi
+
+      # Checks requirements.txt against the OSV vulnerability database.
+      # The binary is verified by checksum and the step stops before running it on a mismatch.
+      # Report only: findings go to the job summary and the step never fails the build (continue-on-error).
+      # Bump both lines together to update the release.
+      - name: Dependency scan (OSV-Scanner, report only)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          echo "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/osv-scanner" scan source --recursive --allow-no-lockfiles --format markdown --output-file "$RUNNER_TEMP/osv.md" . || true
+          { echo "## OSV-Scanner (report only)"; cat "$RUNNER_TEMP/osv.md" 2>/dev/null || echo "No report produced."; } >> "$GITHUB_STEP_SUMMARY"
